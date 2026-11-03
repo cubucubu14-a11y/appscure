@@ -37,3 +37,7 @@
 
     </application>
 </manifest>
+<!-- Untuk Android 13 ke bawah -->
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<!-- Untuk Android 13+ (Membaca file media/audio secara spesifik) -->
+<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
