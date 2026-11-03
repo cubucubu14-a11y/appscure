@@ -128,3 +128,132 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+package com.antitheft.siren
+
+import android.app.Activity
+import android.content.Intent
+import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Bundle
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var btnToggle: Button
+    private lateinit var btnSelectAudio: Button
+    private lateinit var txtStatus: TextView
+    private lateinit var txtAudioPath: TextView
+    private var isArmed = false
+    private lateinit var prefs: SharedPreferences
+
+    companion object {
+        const val PICK_AUDIO_REQUEST = 1001
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        prefs = getSharedPreferences("AntiTheftPrefs", MODE_PRIVATE)
+
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(40, 40, 40, 40)
+        }
+
+        txtStatus = TextView(this).apply {
+            text = "Status: TIDAK AKTIF"
+            textSize = 18f
+            setPadding(0, 0, 0, 20)
+            gravity = android.view.Gravity.CENTER
+        }
+
+        txtAudioPath = TextView(this).apply {
+            val savedUri = prefs.getString("audio_uri", "Belum ada file dipilih (Default sistem)")
+            text = "Audio: $savedUri"
+            textSize = 12f
+            setPadding(0, 0, 0, 30)
+            gravity = android.view.Gravity.CENTER
+        }
+
+        btnSelectAudio = Button(this).apply {
+            text = "PILIH FILE MP3 DARI HP"
+            setOnClickListener {
+                openAudioPicker()
+            }
+        }
+
+        btnToggle = Button(this).apply {
+            text = "AKTIFKAN MODE ANTI-MALING"
+            setOnClickListener {
+                if (!isArmed) {
+                    startAntiTheftService()
+                } else {
+                    stopAntiTheftService()
+                }
+            }
+        }
+
+        layout.addView(txtStatus)
+        layout.addView(txtAudioPath)
+        layout.addView(btnSelectAudio)
+        layout.addView(btnToggle)
+        setContentView(layout)
+    }
+
+    // Membuka pengelola file khusus audio
+    private fun openAudioPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "audio/*"
+        }
+        startActivityForResult(intent, PICK_AUDIO_REQUEST)
+    }
+
+    // Menangkap hasil file MP3 yang dipilih pengguna
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == PICK_AUDIO_REQUEST && resultCode == Activity.RESULT_OK) {
+            data?.data?.let { uri ->
+                // Berikan izin permanen membaca Uri file tersebut agar service bisa mengaksesnya nanti
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+
+                // Simpan URI ke SharedPreferences
+                prefs.edit().putString("audio_uri", uri.toString()).apply()
+                txtAudioPath.text = "Audio: ${uri.lastPathSegment}"
+                Toast.makeText(this, "File MP3 berhasil dipilih!", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun startAntiTheftService() {
+        val serviceIntent = Intent(this, AntiTheftService::class.java).apply {
+            action = "START_ARM"
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+        isArmed = true
+        txtStatus.text = "Status: AKTIF (Letakkan HP di Meja)"
+        btnToggle.text = "MATIKAN ALARM"
+        btnSelectAudio.isEnabled = false // Kunci tombol ganti audio saat aktif
+    }
+
+    private fun stopAntiTheftService() {
+        val serviceIntent = Intent(this, AntiTheftService::class.java).apply {
+            action = "STOP_ARM"
+        }
+        startService(serviceIntent)
+        isArmed = false
+        txtStatus.text = "Status: TIDAK AKTIF"
+        btnToggle.text = "AKTIFKAN MODE ANTI-MALING"
+        btnSelectAudio.isEnabled = true
+    }
+}
