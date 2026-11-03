@@ -1,0 +1,40 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Memungkinkan Anda menekan tombol 'Run workflow' secara manual di GitHub
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Mengambil kode dari repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Menyiapkan Java JDK 17 (Standar wajib untuk Android modern)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      # 3. Memberikan izin eksekusi pada Gradle Wrapper (gradlew)
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # 4. Menjalankan perintah build APK (Debug)
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      # 5. Menyimpan file APK hasil build agar bisa di-download
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
