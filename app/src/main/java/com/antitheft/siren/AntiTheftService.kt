@@ -11,6 +11,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -42,7 +43,7 @@ class AntiTheftService : Service(), SensorEventListener {
         if (action == "START_ARM") {
             isArmed = true
             if (!wakeLock.isHeld) {
-                wakeLock.acquire(15 * 60 * 1000L) // Tahan CPU selama maksimal 15 menit
+                wakeLock.acquire(15 * 60 * 1000L)
             }
             accelerometer?.let {
                 sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
@@ -82,29 +83,44 @@ class AntiTheftService : Service(), SensorEventListener {
         val y = event.values[1]
         val z = event.values[2]
 
-        // Hitung total perubahan akselerasi (gaya gravitasi & gerakan)
         val acceleration = sqrt((x * x + y * y + z * z).toDouble())
 
-        // Ambang batas (Threshold) gerakan diangkat/digeser
-        // Nilai default gravitasi bumi adalah ~9.8. Jika bergeser jauh, terdeteksi diambil.
         if (acceleration > 13.0) {
             triggerAlarmAndScreenOn()
         }
     }
 
     private fun triggerAlarmAndScreenOn() {
-        // 1. Nyalakan Layar HP & Buka Aplikasi
+        // 1. Nyalakan Layar HP
         val wakeIntent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         startActivity(wakeIntent)
 
-        // 2. Bunyikan Sirine (Looping)
+        // 2. Putar MP3 pilihan pengguna dari penyimpanan HP
         if (mediaPlayer == null) {
             try {
-                mediaPlayer = MediaPlayer.create(this, R.raw.siren).apply {
-                    isLooping = true
-                    start()
+                val prefs = getSharedPreferences("AntiTheftPrefs", MODE_PRIVATE)
+                val uriStr = prefs.getString("audio_uri", null)
+
+                if (uriStr != null) {
+                    // Putar dari file pilihan di memori HP
+                    val audioUri = Uri.parse(uriStr)
+                    mediaPlayer = MediaPlayer().apply {
+                        setDataSource(applicationContext, audioUri)
+                        isLooping = true
+                        prepare()
+                        start()
+                    }
+                } else {
+                    // Fallback jika belum pernah pilih file: gunakan ringtone bawaan sistem HP
+                    val defaultRingtone = android.provider.Settings.System.DEFAULT_RINGTONE_URI
+                    mediaPlayer = MediaPlayer().apply {
+                        setDataSource(applicationContext, defaultRingtone)
+                        isLooping = true
+                        prepare()
+                        start()
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -130,6 +146,5 @@ class AntiTheftService : Service(), SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
     override fun onBind(intent: Intent?): IBinder? = null
 }
